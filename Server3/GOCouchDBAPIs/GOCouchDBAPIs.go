@@ -32,20 +32,18 @@ func CreateDBs(DBname string){
     client.CreateDB(context.TODO(),DBname)
 }
 
-func AddAccounts(num int64,client *kivik.Client,DBname string,id int64)(string,error){
+func CreateAccounts(num int32,client *kivik.Client,DBname string,id int32)(string,error){
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
     db := client.DB(context.TODO(), DBname)
-    var i int64
-    num2 := num
-    for i= 0; i < num2; i++{
-	Account := CouchDBAccount{AccountId: id,Deposit: 100000000}
-	id, rev, err := db.CreateDoc(context.TODO(), Account)
-	if err != nil {
+    for i= 0; i < num; i++{
+	    Account := CouchDBAccount{AccountId: id,Deposit: 100000000}
+	    id, rev, err := db.CreateDoc(context.TODO(), Account)
+	    if err != nil {
           return "There are some errors", err
-	}
-	Account.Rev = rev
-	Account.Id = id
+	    }
+	    Account.Rev = rev
+	    Account.Id = id
     }
     return "Successfully",nil
 }
@@ -82,7 +80,7 @@ func GetRandomCouchDBAccount(accounts[] *CouchDBAccount)(*CouchDBAccount, error)
 
 }
 
-func FindAccount(id int64,client *kivik.Client,db *kivik.DB)(CouchDBAccount ,error){
+func FindAccount(id int32,client *kivik.Client,db *kivik.DB)(CouchDBAccount ,error){
    query := map[string]interface{}{
       "selector": map[string]interface{}{
           "account_id": id,
@@ -103,7 +101,7 @@ func FindAccount(id int64,client *kivik.Client,db *kivik.DB)(CouchDBAccount ,err
    return account,nil
 }
 
-func DeleteAccount(id int64,client *kivik.Client,DBname string)(string,error){
+func DeleteAccount(id int32,client *kivik.Client,DBname string)(string,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -122,7 +120,7 @@ func DeleteAccount(id int64,client *kivik.Client,DBname string)(string,error){
     return "Successfully" ,nil
 }
 
-func ReadAccount(id int64,client *kivik.Client,DBname string)(CouchDBAccount,error){
+func ReadAccount(id int32,client *kivik.Client,DBname string)(CouchDBAccount,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -136,7 +134,7 @@ func ReadAccount(id int64,client *kivik.Client,DBname string)(CouchDBAccount,err
     return account,nil
 }
 
-func UpdateAccount(id int64,client *kivik.Client,DBname string,amount int64)(string,error){
+func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32)(string,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -146,7 +144,7 @@ func UpdateAccount(id int64,client *kivik.Client,DBname string,amount int64)(str
       return "Account Not Found",err1
     }
     account.Rev = account.Rev // Must be set
-    account.Deposit = int32(amount)
+    account.Deposit = amount
     newRev, err2 := db.Put(context.TODO(),account.Id, account)
     if err2 != nil {
       return "There are some errors:",err2

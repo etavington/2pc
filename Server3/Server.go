@@ -28,15 +28,13 @@ type Server struct{
 }
 
 func (server *Server)CreateAccount(ctx context.Context,request *pb.CreateAccountRequest)(*pb.Response,error){
-  msg,err :=GOCouchDBAPIs.AddAccounts(1,server.client,"bank4",request.GetAccountId())
+  msg,err :=GOCouchDBAPIs.CreateAccounts(1,server.client,"bank4",request.GetAccountId())
   if err !=nil{
     return &pb.Response{
-       Err: false,
        Msg: msg,
     },err
   }else{
     return &pb.Response{
-       Err: true,
        Msg: msg,
     },nil
   }
@@ -46,12 +44,10 @@ func(server *Server)DeleteAccount(ctx context.Context,request *pb.DeleteAccountR
   msg, err:= GOCouchDBAPIs.DeleteAccount(request.GetAccountId(),server.client,"bank4")
   if err !=nil{
     return &pb.Response{
-     Err: false,
      Msg: msg,
     },err
   }else{
     return &pb.Response{
-     Err: true,
      Msg: msg,
     },nil
   }
@@ -63,12 +59,10 @@ func(server *Server)ReadAccount(ctx context.Context,request *pb.ReadAccountReque
   msg:= strconv.FormatInt(account.AccountId,10)+"\n"+strconv.FormatInt(int64(account.Deposit),10)
   if err !=nil{
     return &pb.Response{
-      Err: false,
       Msg: msg,
     },err
   }else{
     return &pb.Response{
-      Err: true,
       Msg: msg,
     },nil
   }
@@ -80,12 +74,10 @@ func(server *Server)UpdateAccount(ctx context.Context,request *pb.UpdateAccountR
   //msg:= strconv.FormatInt(account.AccountId,10)+"\n"+strconv.FormatInt(int64(account.Deposit),10)
   if err !=nil{
     return &pb.Response{
-      Err: false,
       Msg: msg,
     },err
   }else{
     return &pb.Response{
-      Err: true,
       Msg: msg,
     },nil
   }
@@ -107,7 +99,6 @@ func(server *Server)Reset(ctx context.Context,request *pb.ResetRequest)(*pb.Resp
   //client.Destory(context.TODO(),DBname)
   //client.CreateDB(context.TODO(),DBname)
   return &pb.Response{
-    Err: true,
     Msg: "Success",
   },nil
 }
@@ -130,30 +121,27 @@ func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransa
     account: account,
   }
   queue[request.GetTransactionId()]=q
-  if(int64(account.Deposit)+request.GetAmount()>=0){
+  if(account.Deposit+request.GetAmount()>=0){
     msg :="Legal"
     return &pb.Response{
-      Err: true,
       Msg: msg,
     },nil
   }else{
     msg:="Illegal"
     return &pb.Response{
-      Err: false,
       Msg: msg,
     },nil
   }
 }
 
 func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Response,error){
-  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank4",int64(queue[request.GetTransactionId()].account.Deposit)+queue[request.GetTransactionId()].request.GetAmount())
+  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank4",queue[request.GetTransactionId()].account.Deposit+queue[request.GetTransactionId()].request.GetAmount())
   if err_update !=nil{
      panic(err_update)
   }
   queue[request.GetTransactionId()]=Queue{}
   msg_update = "Commit"
   return &pb.Response{
-    Err: true,
     Msg: msg_update,
   },nil
 }
@@ -161,7 +149,6 @@ func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Re
 func(server *Server)Abort(ctx context.Context,request *pb.AbortRequest)(*pb.Response,error){
   queue[request.GetTransactionId()]=Queue{}
   return &pb.Response{
-    Err: true,
     Msg: "Abort",
   },nil
 }
@@ -182,9 +169,8 @@ func NewServer()(Server,error){
 
 func main(){
 /*  GOCouchDBAPIs.CreateDBs("bank4")
-  var i int64
   for i=1;i<=10000;i++{
-    GOCouchDBAPIs.AddAccounts(1,"bank4",i)
+    GOCouchDBAPIs.CreateAccounts(1,"bank4",i)
   } */
   server, err:=NewServer()
   lis ,err:=net.Listen("tcp",":50051")
