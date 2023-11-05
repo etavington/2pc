@@ -6,6 +6,8 @@ import(
 
   pb"Client/grpc_2pc"
   "google.golang.org/grpc"
+  "github.com/golang/protobuf/ptypes/empty"
+
 )
 func CallCreateAccount(client pb.TwoPhaseCommitServiceClient,request *pb.CreateAccountRequest)(){
    res, err:=client.CreateAccount(context.Background(),request)
@@ -39,7 +41,7 @@ func CallUpdateAccount(client pb.TwoPhaseCommitServiceClient,request *pb.UpdateA
   println(res.Msg)
 }
 
-func CallReset(client pb.TwoPhaseCommitServiceClient,request *pb.ResetRequest)(){
+func CallReset(client pb.TwoPhaseCommitServiceClient,request *empty.Empty)(){
   res, err:=client.Reset(context.Background(),request)
   if err!=nil{
     log.Fatalf("Fail to call Reset: %v",err)
@@ -54,8 +56,8 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
    }
    if res_begin.Msg== "Legal"{
      commit := &pb.CommitRequest{
-      TransactionId: begintransaction.GetTransactionId(),
-      AccountId: begintransaction.GetAccountId(),
+       AccountId: begintransaction.GetAccountId(),
+       Amount: begintransaction.GetAmount(),
      }
      res_commit,err_commit:=client.Commit(context.Background(),commit)
      if err_commit !=nil{
@@ -64,7 +66,6 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
      println(res_commit.Msg)
    }else{
      abort := &pb.AbortRequest{
-      TransactionId: begintransaction.GetTransactionId(),
       AccountId: begintransaction.GetAccountId(),
      }
      res_abort,err_abort:=client.Abort(context.Background(),abort)
@@ -77,7 +78,7 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
 }
 
 func main(){
-   conn, err :=grpc.Dial("34.81.8.182:50051",grpc.WithInsecure())
+   conn, err :=grpc.Dial("34.80.195.25:50051",grpc.WithInsecure())
    if err !=nil{
      log.Fatalf("Fail to dial server: %v",err)
    }
@@ -91,10 +92,8 @@ func main(){
             Amount: 100,
           } */ 
      request2:= &pb.BeginTransactionRequest{
-      ServerIp:  "1",
       AccountId: 1,
-      Amount: -1000,
-      TransactionId: 1,
+      Amount: -1000,    
      }     
      //CallCreateAccount(client,request)
      //CallUpdateAccount(client,request)
