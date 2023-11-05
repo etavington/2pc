@@ -3,12 +3,14 @@ package main
 import(
  "log"
  "net"
+ //"sync"
  "context"
  "strconv"
 
  "Server/GOCouchDBAPIs"
 
  "google.golang.org/grpc"
+ "github.com/golang/protobuf/ptypes/empty"
  pb"Server/grpc_2pc"
 
  "github.com/go-kivik/kivik/v3"
@@ -18,7 +20,7 @@ import(
 /*type CouchDBAccount struct {
         Id      string `json:"_id,omitempty"`
         Rev     string `json:"_rev,omitempty"`
-        AccountId int64 `json:"account_id,omitempty"`
+        AccountId int32 `json:"account_id,omitempty"`
         Deposit int32    `json:"deposit,omitempty"`
 }*/
 
@@ -28,7 +30,7 @@ type Server struct{
 }
 
 func (server *Server)CreateAccount(ctx context.Context,request *pb.CreateAccountRequest)(*pb.Response,error){
-  msg,err :=GOCouchDBAPIs.CreateAccounts(1,server.client,"bank4",request.GetAccountId())
+  msg,err :=GOCouchDBAPIs.CreateAccounts(1,server.client,"bank1",request.GetAccountId())
   if err !=nil{
     return &pb.Response{
        Msg: msg,
@@ -41,7 +43,7 @@ func (server *Server)CreateAccount(ctx context.Context,request *pb.CreateAccount
 }
 
 func(server *Server)DeleteAccount(ctx context.Context,request *pb.DeleteAccountRequest)(*pb.Response,error){
-  msg, err:= GOCouchDBAPIs.DeleteAccount(request.GetAccountId(),server.client,"bank4")
+  msg, err:= GOCouchDBAPIs.DeleteAccount(request.GetAccountId(),server.client,"bank1")
   if err !=nil{
     return &pb.Response{
      Msg: msg,
@@ -55,8 +57,8 @@ func(server *Server)DeleteAccount(ctx context.Context,request *pb.DeleteAccountR
 
 func(server *Server)ReadAccount(ctx context.Context,request *pb.ReadAccountRequest)(*pb.Response,error){
   var account GOCouchDBAPIs.CouchDBAccount
-  account,err := GOCouchDBAPIs.ReadAccount(request.GetAccountId(),server.client,"bank4")
-  msg:= strconv.FormatInt(account.AccountId,10)+"\n"+strconv.FormatInt(int64(account.Deposit),10)
+  account,err := GOCouchDBAPIs.ReadAccount(request.GetAccountId(),server.client,"bank1")
+  msg:= strconv.FormatInt(int64(account.AccountId),10)+"\n"+strconv.FormatInt(int64(account.Deposit),10)
   if err !=nil{
     return &pb.Response{
       Msg: msg,
@@ -70,7 +72,7 @@ func(server *Server)ReadAccount(ctx context.Context,request *pb.ReadAccountReque
 
 func(server *Server)UpdateAccount(ctx context.Context,request *pb.UpdateAccountRequest)(*pb.Response,error){
   //var account GOCouchDBAPIs.CouchDBAccount
-  msg,err:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank4",request.GetAmount())
+  msg,err:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",request.GetAmount())
   //msg:= strconv.FormatInt(account.AccountId,10)+"\n"+strconv.FormatInt(int64(account.Deposit),10)
   if err !=nil{
     return &pb.Response{
@@ -83,7 +85,7 @@ func(server *Server)UpdateAccount(ctx context.Context,request *pb.UpdateAccountR
   }
 }
 
-func(server *Server)Reset(ctx context.Context,request *pb.ResetRequest)(*pb.Response,error){
+func(server *Server)Reset(ctx context.Context,request *empty.Empty)(*pb.Response,error){
   client :=GOCouchDBAPIs.CreatekivikClient()
   defer client.Close(context.Background())
   var list []string
@@ -104,24 +106,24 @@ func(server *Server)Reset(ctx context.Context,request *pb.ResetRequest)(*pb.Resp
 }
 //------------------------------------------------------------------------------------------------
 type Queue struct{
-  request *pb.BeginTransactionRequest
   account GOCouchDBAPIs.CouchDBAccount
 }
 var queue[100000]Queue
+var bank_lock[10]bool
 
 func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransactionRequest)(*pb.Response,error){
 //haven't completed lock yet
   var account GOCouchDBAPIs.CouchDBAccount
-  account,err_read := GOCouchDBAPIs.ReadAccount(request.GetAccountId(),server.client,"bank4")
+  account,err_read := GOCouchDBAPIs.ReadAccount(request.GetAccountId(),server.client,"bank1")
   if err_read !=nil{
     panic(err_read)
   }
   q := Queue{
-    request: request,
     account: account,
   }
-  queue[request.GetTransactionId()]=q
-  if(account.Deposit+request.GetAmount()>=0){
+  queue[request.GetAccountId()]=q
+  if((account.Deposit+request.GetAmount()>=0)&&(bank_lock[1]==false)){
+    bank_lock[1]=true
     msg :="Legal"
     return &pb.Response{
       Msg: msg,
@@ -135,19 +137,20 @@ func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransa
 }
 
 func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Response,error){
-  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank4",queue[request.GetTransactionId()].account.Deposit+queue[request.GetTransactionId()].request.GetAmount())
+  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",queue[request.GetAccountId()].account.Deposit+request.GetAmount())
   if err_update !=nil{
      panic(err_update)
   }
-  queue[request.GetTransactionId()]=Queue{}
+  queue[request.GetAccountId()]=Queue{}
   msg_update = "Commit"
+  bank_lock[1]=false
   return &pb.Response{
     Msg: msg_update,
   },nil
 }
 
 func(server *Server)Abort(ctx context.Context,request *pb.AbortRequest)(*pb.Response,error){
-  queue[request.GetTransactionId()]=Queue{}
+  queue[request.GetAccountId()]=Queue{}
   return &pb.Response{
     Msg: "Abort",
   },nil
@@ -168,11 +171,12 @@ func NewServer()(Server,error){
 }
 
 func main(){
-/*  GOCouchDBAPIs.CreateDBs("bank4")
-  for i=1;i<=10000;i++{
-    GOCouchDBAPIs.CreateAccounts(1,"bank4",i)
-  } */
   server, err:=NewServer()
+  /*GOCouchDBAPIs.CreateDBs("bank1")
+  var i int32
+  for i=1;i<=10000;i++{
+    GOCouchDBAPIs.CreateAccounts(1,server.client,"bank1",i)
+  }*/
   lis ,err:=net.Listen("tcp",":50051")
   if err !=nil{
     log.Fatalf("Fail to listen: %v",err)
