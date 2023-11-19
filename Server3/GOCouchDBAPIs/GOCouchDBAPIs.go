@@ -14,7 +14,7 @@ import (
 type CouchDBAccount struct {
 	Id      string `json:"_id,omitempty"`
 	Rev     string `json:"_rev,omitempty"`
-	AccountId int64 `json:"account_id,omitempty"`
+	AccountId int32 `json:"account_id,omitempty"`
 	Deposit int32    `json:"deposit,omitempty"`
 }
 
@@ -36,6 +36,7 @@ func CreateAccounts(num int32,client *kivik.Client,DBname string,id int32)(strin
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
     db := client.DB(context.TODO(), DBname)
+    var i int32
     for i= 0; i < num; i++{
 	    Account := CouchDBAccount{AccountId: id,Deposit: 100000000}
 	    id, rev, err := db.CreateDoc(context.TODO(), Account)

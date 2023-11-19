@@ -54,8 +54,7 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
    }
    if res_begin.Msg== "Legal"{
      commit := &pb.CommitRequest{
-      TransactionId: begintransaction.GetTransactionId(),
-      AccountId: begintransaction.GetAccountId(),
+       AccountId: begintransaction.GetAccountId(),
      }
      res_commit,err_commit:=client.Commit(context.Background(),commit)
      if err_commit !=nil{
@@ -64,7 +63,6 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
      println(res_commit.Msg)
    }else{
      abort := &pb.AbortRequest{
-      TransactionId: begintransaction.GetTransactionId(),
       AccountId: begintransaction.GetAccountId(),
      }
      res_abort,err_abort:=client.Abort(context.Background(),abort)
@@ -91,10 +89,8 @@ func main(){
             Amount: 100,
           } */ 
      request2:= &pb.BeginTransactionRequest{
-      ServerIp:  "1",
       AccountId: 1,
-      Amount: -1000,
-      TransactionId: 1,
+      Amount: -1000,    
      }     
      //CallCreateAccount(client,request)
      //CallUpdateAccount(client,request)
