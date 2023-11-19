@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.3.0
 // - protoc             v4.22.3
-// source: two-phase-commit.proto
+// source: Client3/grpc_2pc/two-phase-commit.proto
 
 package __
 
@@ -365,5 +365,5 @@ var TwoPhaseCommitService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "two-phase-commit.proto",
+	Metadata: "Client3/grpc_2pc/two-phase-commit.proto",
 }
