@@ -2,20 +2,58 @@ package GOCouchDBAPIs
 
 import (
 	"github.com/go-kivik/kivik/v3"
-    _ "github.com/go-kivik/couchdb/v3"
-	//"github.com/go-kivik/kivik/v4/driver/couchdb"
-	"context"
+  _ "github.com/go-kivik/couchdb/v3"
+	"sync"
+  "context"
 	"math/rand"
 	"fmt"
 	//"strconv"
 	//"log"
 )
 
+type FileHandler interface{  
+  ReadFromFile() (map[int32]CouchDBAccount,error)
+  WriteToFile(map[int32]CouchDBAccount) error
+}
+
 type CouchDBAccount struct {
 	Id      string `json:"_id,omitempty"`
 	Rev     string `json:"_rev,omitempty"`
 	AccountId int32 `json:"account_id,omitempty"`
 	Deposit int32    `json:"deposit,omitempty"`
+  //Mu sync.Mutex
+}
+
+func ReadFromFile(f FileHandler)(map[int32]CouchDBAccount,error){
+  var to_file map[int32]CouchDBAccount
+  to_file,err:=f.ReadFromFile()
+  if err!=nil{
+     return to_file,err
+  }
+  return to_file,nil
+}
+
+func WriteToFile(f FileHandler,to_file map[int32]CouchDBAccount)(error){
+  err:=f.WriteToFile(to_file)
+  if err!=nil{
+    return err
+  }
+  return nil
+}
+
+func LoadCache()(Cache){
+    var cache_tmp Cache
+    to_file_tmp,err :=ReadFromFile(&cache_tmp)
+    if err!=nil{
+      panic(err)
+    }
+    local_accounts_tmp:=MapToSyncMap(to_file_tmp)
+
+    cache_tmp=Cache{
+      to_file: to_file_tmp,
+      local_accounts: local_accounts_tmp,
+    }
+    return cache_tmp
 }
 
 func CreatekivikClient()(*kivik.Client){
@@ -32,25 +70,31 @@ func CreateDBs(DBname string){
     client.CreateDB(context.TODO(),DBname)
 }
 
-func CreateAccounts(num int32,client *kivik.Client,DBname string,id int32)(string,error){
+func CreateAccounts(num int32,client *kivik.Client,DBname string,cache Cache,id int32)(string,error){
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
     db := client.DB(context.TODO(), DBname)
     var i int32
     for i= 0; i < num; i++{
-	    Account := CouchDBAccount{AccountId: id,Deposit: 100000000}
+	    Account := CouchDBAccount{AccountId: id,Deposit: 100000000,}
 	    id, rev, err := db.CreateDoc(context.TODO(), Account)
 	    if err != nil {
           return "There are some errors", err
 	    }
 	    Account.Rev = rev
 	    Account.Id = id
+      //Account.Mu = new(sync.Mutex)
+      cache.To_File[Account.AccountId] = Account
+      err =WriteToFile(&cache,cache.To_File)
+      if err!=nil{
+         panic(err)
+      }
     }
     return "Successfully",nil
 }
 
 func AllDocuments(DBname string)([]*CouchDBAccount, error){
-        client :=CreatekivikClient()
+  client :=CreatekivikClient()
 	defer client.Close(context.Background())
 	db := client.DB(context.TODO(), DBname)
 
@@ -70,6 +114,7 @@ func AllDocuments(DBname string)([]*CouchDBAccount, error){
 	}
 	return accounts, nil
 }
+
 func GetRandomCouchDBAccount(accounts[] *CouchDBAccount)(*CouchDBAccount, error){
 	if len(accounts) == 0 {
 		return nil, fmt.Errorf("沒有可用的帳戶")
@@ -102,7 +147,7 @@ func FindAccount(id int32,client *kivik.Client,db *kivik.DB)(CouchDBAccount ,err
    return account,nil
 }
 
-func DeleteAccount(id int32,client *kivik.Client,DBname string)(string,error){
+func DeleteAccount(id int32,client *kivik.Client,DBname string,cache Cache)(string,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -118,6 +163,11 @@ func DeleteAccount(id int32,client *kivik.Client,DBname string)(string,error){
     }
     if rev=="0"{
     }
+    delete(cache.to_file,id)
+    err:=WriteToFile(&cache,cache.to_file)
+    if err!=nil{
+       panic(err)
+    }
     return "Successfully" ,nil
 }
 
@@ -130,12 +180,12 @@ func ReadAccount(id int32,client *kivik.Client,DBname string)(CouchDBAccount,err
     if err!=nil{
       return CouchDBAccount{},err
     }
-   // println(account.AccountId,"\n",account.Deposit)
+   //println(account.AccountId,"\n",account.Deposit)
    //msg :=strconv.ormatInt.(account.AccountId,10)+"\n"+strconv.FormatInt.(account.Deposit,10)
     return account,nil
 }
 
-func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32)(string,error){
+func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32,cache Cache)(string,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -151,6 +201,11 @@ func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32)(str
       return "There are some errors:",err2
     }
     account.Rev = newRev
+    cache.to_file[id] = account
+    err:=WriteToFile(&cache,cache.to_file)
+    if err!=nil{
+       panic(err)
+    }
 
     return "Successfully",nil
 }
