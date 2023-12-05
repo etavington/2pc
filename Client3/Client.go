@@ -19,6 +19,7 @@ func CallCreateAccount(client pb.TwoPhaseCommitServiceClient,request *pb.CreateA
      log.Fatalf("Fail to call CreateAccount: %v",err)
    }
    println(res.Msg)
+   wg.Done()
 }
 
 func CallDeleteAccount(client pb.TwoPhaseCommitServiceClient,request *pb.DeleteAccountRequest)(){
@@ -78,7 +79,7 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
      }
      println(res_abort.Msg)
    } 
-   wg.Done()
+   //wg.Done()
    //println(res_begin.Msg)
 }
 
@@ -90,7 +91,7 @@ func main(){
    defer conn.Close()
    client :=pb.NewTwoPhaseCommitServiceClient(conn)
    for i:=0; i<10; i++{
-    wg.Add(1)
+    //wg.Add(1)
     //rand_id:= rand.Int31()
     /*Account*/
      /*request := &pb.UpdateAccountRequest{
@@ -99,18 +100,18 @@ func main(){
             Amount: 100,
           } */ 
      request2:= &pb.BeginTransactionRequest{
-      AccountId: 1871666083,
-      Amount: -100,    
+      AccountId: 1275275219,
+      Amount: -10,    
      }
      /*request3:= &pb.CreateAccountRequest{
       AccountId: rand_id,
-     } */   
-     //CallCreateAccount(client,request3)
+     }*/   
+     //go CallCreateAccount(client,request3)
      //CallUpdateAccount(client,request)
      //CallReadAccount(client,request)
      //CallDeleteAccount(client,request)
      //CallReset(client,request)
-     go CallTwoPhaseCommit(client,request2)
+     CallTwoPhaseCommit(client,request2)
    }
-   wg.Wait()
+   //wg.Wait()
 }
