@@ -21,20 +21,19 @@ type CouchDBAccount struct {
 	Rev     string `json:"_rev,omitempty"`
 	AccountId int32 `json:"account_id,omitempty"`
 	Deposit int32    `json:"deposit,omitempty"`
-  //Mu sync.Mutex
 }
 
 func ReadFromFile(f FileHandler)(map[int32]CouchDBAccount,error){
-  var to_file map[int32]CouchDBAccount
-  to_file,err:=f.ReadFromFile()
+  var To_file map[int32]CouchDBAccount
+  To_file,err:=f.ReadFromFile()
   if err!=nil{
-     return to_file,err
+     return To_file,err
   }
-  return to_file,nil
+  return To_file,nil
 }
 
-func WriteToFile(f FileHandler,to_file map[int32]CouchDBAccount)(error){
-  err:=f.WriteToFile(to_file)
+func WriteToFile(f FileHandler,To_file map[int32]CouchDBAccount)(error){
+  err:=f.WriteToFile(To_file)
   if err!=nil{
     return err
   }
@@ -43,17 +42,29 @@ func WriteToFile(f FileHandler,to_file map[int32]CouchDBAccount)(error){
 
 func LoadCache()(Cache){
     var cache_tmp Cache
-    to_file_tmp,err :=ReadFromFile(&cache_tmp)
+    To_file_tmp,err :=ReadFromFile(&cache_tmp)
     if err!=nil{
       panic(err)
     }
-    local_accounts_tmp:=MapToSyncMap(to_file_tmp)
+    Local_accounts_tmp:=MapToSyncMap(To_file_tmp)
 
     cache_tmp=Cache{
-      to_file: to_file_tmp,
-      local_accounts: local_accounts_tmp,
+      To_file: To_file_tmp,
+      Local_accounts: Local_accounts_tmp,
     }
     return cache_tmp
+}
+
+func CreateLocks(cache Cache,accounts_lock *sync.Map)(){
+  var wg sync.WaitGroup
+  for k:=range cache.To_file{
+    wg.Add(1)
+    go func(k int32){
+      (*accounts_lock).Store(k,&sync.Mutex{})
+      wg.Done()
+    }(k)
+  }
+  wg.Wait()
 }
 
 func CreatekivikClient()(*kivik.Client){
@@ -70,7 +81,7 @@ func CreateDBs(DBname string){
     client.CreateDB(context.TODO(),DBname)
 }
 
-func CreateAccounts(num int32,client *kivik.Client,DBname string,cache Cache,id int32)(string,error){
+func CreateAccounts(num int32,client *kivik.Client,DBname string,cache *Cache,id int32,accounts_lock *sync.Map)(string,error){
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
     db := client.DB(context.TODO(), DBname)
@@ -83,12 +94,8 @@ func CreateAccounts(num int32,client *kivik.Client,DBname string,cache Cache,id 
 	    }
 	    Account.Rev = rev
 	    Account.Id = id
-      //Account.Mu = new(sync.Mutex)
-      cache.To_File[Account.AccountId] = Account
-      err =WriteToFile(&cache,cache.To_File)
-      if err!=nil{
-         panic(err)
-      }
+      (*accounts_lock).Store(Account.AccountId,&sync.Mutex{})
+      cache.Local_accounts.Store(Account.AccountId,Account)
     }
     return "Successfully",nil
 }
@@ -147,7 +154,7 @@ func FindAccount(id int32,client *kivik.Client,db *kivik.DB)(CouchDBAccount ,err
    return account,nil
 }
 
-func DeleteAccount(id int32,client *kivik.Client,DBname string,cache Cache)(string,error){
+func DeleteAccount(id int32,client *kivik.Client,DBname string,cache *Cache,accounts_lock *sync.Map)(string,error){
     var account CouchDBAccount
     //client :=CreatekivikClient()
     //defer client.Close(context.Background())
@@ -163,11 +170,8 @@ func DeleteAccount(id int32,client *kivik.Client,DBname string,cache Cache)(stri
     }
     if rev=="0"{
     }
-    delete(cache.to_file,id)
-    err:=WriteToFile(&cache,cache.to_file)
-    if err!=nil{
-       panic(err)
-    }
+    (*accounts_lock).Delete(id)
+    cache.Local_accounts.Delete(id)
     return "Successfully" ,nil
 }
 
@@ -185,10 +189,8 @@ func ReadAccount(id int32,client *kivik.Client,DBname string)(CouchDBAccount,err
     return account,nil
 }
 
-func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32,cache Cache)(string,error){
+func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32,cache *Cache)(string,error){
     var account CouchDBAccount
-    //client :=CreatekivikClient()
-    //defer client.Close(context.Background())
     db := client.DB(context.TODO(),DBname)
     account ,err1:= FindAccount(id,client,db)
     if err1 !=nil{
@@ -201,11 +203,7 @@ func UpdateAccount(id int32,client *kivik.Client,DBname string,amount int32,cach
       return "There are some errors:",err2
     }
     account.Rev = newRev
-    cache.to_file[id] = account
-    err:=WriteToFile(&cache,cache.to_file)
-    if err!=nil{
-       panic(err)
-    }
+    cache.Local_accounts.Store(id,account)
 
     return "Successfully",nil
 }

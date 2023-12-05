@@ -4,6 +4,9 @@ import(
  "log"
  "net"
  "sync"
+ "os"
+ "os/signal"
+ "syscall"
  "context"
  "strconv"
 
@@ -26,12 +29,12 @@ type Server struct{
   pb.UnimplementedTwoPhaseCommitServiceServer
   client *kivik.Client
   cache GOCouchDBAPIs.Cache
-  accounts_lock map[int32]sync.Mutex
+  accounts_lock sync.Map
 }
  
 
 func (server *Server)CreateAccount(ctx context.Context,request *pb.CreateAccountRequest)(*pb.Response,error){
-  msg,err :=GOCouchDBAPIs.CreateAccounts(1,server.client,"bank1",server.cache,request.GetAccountId())
+  msg,err :=GOCouchDBAPIs.CreateAccounts(1,server.client,"bank1",&server.cache,request.GetAccountId(),&server.accounts_lock)
   if err !=nil{
     return &pb.Response{
        Msg: msg,
@@ -44,7 +47,7 @@ func (server *Server)CreateAccount(ctx context.Context,request *pb.CreateAccount
 }
 
 func(server *Server)DeleteAccount(ctx context.Context,request *pb.DeleteAccountRequest)(*pb.Response,error){
-  msg, err:= GOCouchDBAPIs.DeleteAccount(request.GetAccountId(),server.client,"bank1",server.cache)
+  msg, err:= GOCouchDBAPIs.DeleteAccount(request.GetAccountId(),server.client,"bank1",&server.cache,&server.accounts_lock)
   if err !=nil{
     return &pb.Response{
      Msg: msg,
@@ -73,7 +76,7 @@ func(server *Server)ReadAccount(ctx context.Context,request *pb.ReadAccountReque
 
 func(server *Server)UpdateAccount(ctx context.Context,request *pb.UpdateAccountRequest)(*pb.Response,error){
   //var account GOCouchDBAPIs.CouchDBAccount
-  msg,err:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",request.GetAmount(),server.cache)
+  msg,err:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",request.GetAmount(),&server.cache)
   if err !=nil{
     return &pb.Response{
       Msg: msg,
@@ -123,8 +126,10 @@ func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransa
     }
   }*/
   //server.Mu=server.cache.Map1[request.GetAccountId()].Mu
-  server.Mu.Lock()
-  if(server.cache.Map1[request.GetAccountId()].Deposit+request.GetAmount()>=0){  
+  value, _:=server.accounts_lock.Load(request.GetAccountId())
+  value.(*sync.Mutex).Lock()
+  account, _:=server.cache.Local_accounts.Load(request.GetAccountId())
+  if(account.(GOCouchDBAPIs.CouchDBAccount).Deposit+request.GetAmount()>=0){  
     msg :="Legal"
     return &pb.Response{
       Msg: msg,
@@ -138,21 +143,23 @@ func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransa
 }
 
 func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Response,error){
-  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",server.cache.Map1[request.GetAccountId()].Deposit+request.GetAmount(),server.cache)
+  account, _:=server.cache.Local_accounts.Load(request.GetAccountId())
+  msg_update, err_update:= GOCouchDBAPIs.UpdateAccount(request.GetAccountId(),server.client,"bank1",account.(GOCouchDBAPIs.CouchDBAccount).Deposit+request.GetAmount(),&server.cache)
   if err_update !=nil{
      panic(err_update)
   }
   msg_update = "Commit"
   //Mu=server.cache.Map1[request.GetAccountId()].Mu
-  server.Mu.Unlock()
+  value, _:=server.accounts_lock.Load(request.GetAccountId())
+  value.(*sync.Mutex).Unlock()
   return &pb.Response{
     Msg: msg_update,
   },nil
 }
 
 func(server *Server)Abort(ctx context.Context,request *pb.AbortRequest)(*pb.Response,error){
-  //Mu=server.cache.Map1[request.GetAccountId()].Mu
-  server.Mu.Unlock()
+  value, _:=server.accounts_lock.Load(request.GetAccountId())
+  value.(*sync.Mutex).Unlock()
   return &pb.Response{
     Msg: "Abort",
   },nil
@@ -170,17 +177,26 @@ func NewServer()(Server,error){
   server:= Server{
     client: client,
     cache: cache,
+    accounts_lock: sync.Map{},
   }
+  GOCouchDBAPIs.CreateLocks(cache,&server.accounts_lock)
   return server,nil
 }
 
 func main(){
   server, err:=NewServer()
+  c:=make(chan os.Signal,1)
+  signal.Notify(c,os.Interrupt,syscall.SIGINT,syscall.SIGTERM)
+  go func(){
+    <- c
+    server.cache.To_file=GOCouchDBAPIs.SyncMapToMap(server.cache.Local_accounts)
+    err:=GOCouchDBAPIs.WriteToFile(&(server.cache),server.cache.To_file)
+    if err!=nil{
+      panic(err)
+    }
+    os.Exit(1)
+  }()
   GOCouchDBAPIs.CreateDBs("bank1")
-  /*for key,value :=range server.cache.Map1{
-    print(key," ",value.AccountId," ",value.Deposit,"\n")
-  }*/
-  //print(server.cache.Map1[15784715].Deposit,"\n")
   lis ,err:=net.Listen("tcp",":50051")
   if err !=nil{
     log.Fatalf("Fail to listen: %v",err)

@@ -7,11 +7,11 @@ import(
 )
 
 type Cache struct{
-   to_file map[int32]CouchDBAccount
-   local_accounts sync.Map       
+   To_file map[int32]CouchDBAccount
+   Local_accounts sync.Map       
 }
 
-func (cache *Cache)WriteToFile(to_file map[int32]CouchDBAccount)(error){
+func (cache *Cache)WriteToFile(To_file map[int32]CouchDBAccount)(error){
     file, err :=os.OpenFile("Cache/Cache.json",os.O_WRONLY|os.O_CREATE|os.O_TRUNC,0644)
     if err!=nil{
        return err
@@ -19,7 +19,7 @@ func (cache *Cache)WriteToFile(to_file map[int32]CouchDBAccount)(error){
     defer file.Close()
 
     encoder :=json.NewEncoder(file)
-    if err:=encoder.Encode(to_file);err!=nil{
+    if err:=encoder.Encode(To_file);err!=nil{
       return err
     }
 
@@ -35,16 +35,16 @@ func (cache *Cache)ReadFromFile()(map[int32]CouchDBAccount,error){
 
      var cache_tmp Cache
      decoder:=json.NewDecoder(file)
-     if err:=decoder.Decode(&cache_tmp.to_file);err!=nil{
+     if err:=decoder.Decode(&cache_tmp.To_file);err!=nil{
          return nil, err
      }
 
-     return cache_tmp.to_file,nil
+     return cache_tmp.To_file,nil
 }
 
-func SyncMapToMap(local_accounts sync.Map)map[int32]CouchDBAccount {
-   to_file_tmp:=make(map[int32]CouchDBAccount)
-   local_accounts.Range(func (key,value interface{}) bool{
+func SyncMapToMap(Local_accounts sync.Map)map[int32]CouchDBAccount {
+   To_file_tmp:=make(map[int32]CouchDBAccount)
+   Local_accounts.Range(func (key,value interface{}) bool{
 	  k,ok:=key.(int32)
 	  if !ok{
 		print("Type Error")
@@ -55,16 +55,16 @@ func SyncMapToMap(local_accounts sync.Map)map[int32]CouchDBAccount {
 		print("Type Error")
 		return true
 	  }
-     to_file_tmp[k]=v
+     To_file_tmp[k]=v
 	  return true
    })
-   return to_file_tmp
+   return To_file_tmp
 }
 
-func MapToSyncMap(to_file map[int32]CouchDBAccount) sync.Map{
-	 var local_accounts_tmp sync.Map
-     for k,v :=range to_file{
-      local_accounts_tmp.Store(k,v)
+func MapToSyncMap(To_file map[int32]CouchDBAccount) sync.Map{
+	 var Local_accounts_tmp sync.Map
+     for k,v :=range To_file{
+      Local_accounts_tmp.Store(k,v)
 	 }
-	 return local_accounts_tmp
+	 return Local_accounts_tmp
 }
