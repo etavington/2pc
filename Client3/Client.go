@@ -2,7 +2,9 @@ package main
 
 import(
   "log"
+  "fmt"
   "sync"
+  "time"
   "context"
   //"math/rand"
 
@@ -44,6 +46,7 @@ func CallUpdateAccount(client pb.TwoPhaseCommitServiceClient,request *pb.UpdateA
     log.Fatalf("Fail to call UpdateAccount: %v",err)
   }
   println(res.Msg)
+  wg.Done()
 }
 
 func CallReset(client pb.TwoPhaseCommitServiceClient,request *empty.Empty)(){
@@ -59,6 +62,7 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
    if err_begin !=nil{
     log.Fatalf("Fail to call BeginTransaction: %v",err_begin)
    }
+   //println(res_begin.Msg)
    if res_begin.Msg== "Legal"{
      commit := &pb.CommitRequest{
        AccountId: begintransaction.GetAccountId(),
@@ -77,9 +81,11 @@ func CallTwoPhaseCommit(client pb.TwoPhaseCommitServiceClient,begintransaction *
      if err_abort !=nil{
       log.Fatalf("Fail to call Abort: %v",err_abort)
      }
-     println(res_abort.Msg)
+     if res_abort.Msg =="Abort"{
+        //println(res_abort.Msg)
+     }
    } 
-   //wg.Done()
+   wg.Done()
    //println(res_begin.Msg)
 }
 
@@ -90,28 +96,51 @@ func main(){
    }
    defer conn.Close()
    client :=pb.NewTwoPhaseCommitServiceClient(conn)
-   for i:=0; i<10; i++{
-    //wg.Add(1)
+   var i int32;
+   startTime := time.Now()
+   for i=1; i<=10000; i++{
+    wg.Add(1)
     //rand_id:= rand.Int31()
     /*Account*/
-     /*request := &pb.UpdateAccountRequest{
-            ServerIp:    "123",
-            AccountId:    1,
-            Amount: 100,
-          } */ 
-     request2:= &pb.BeginTransactionRequest{
-      AccountId: 1275275219,
-      Amount: -10,    
-     }
-     /*request3:= &pb.CreateAccountRequest{
-      AccountId: rand_id,
-     }*/   
-     //go CallCreateAccount(client,request3)
-     //CallUpdateAccount(client,request)
+    /*request := &pb.UpdateAccountRequest{
+        AccountId: 77715539,
+        Amount: 10000,
+    }*/  
+     /*request5:= &pb.CreateAccountRequest{
+      AccountId: i,
+     } */ 
+     //go CallCreateAccount(client,request5)
+     //go CallUpdateAccount(client,request)
      //CallReadAccount(client,request)
      //CallDeleteAccount(client,request)
      //CallReset(client,request)
-     CallTwoPhaseCommit(client,request2)
+     go func(){
+      request2:= &pb.BeginTransactionRequest{
+        AccountId: i,
+        Amount: -10000000,    
+       }
+       /*request3:= &pb.BeginTransactionRequest{
+        AccountId: 1778825488,
+        Amount: -1,    
+       }
+       request4:= &pb.BeginTransactionRequest{
+        AccountId: 1144598379,
+        Amount: -1,    
+       }*/
+       CallTwoPhaseCommit(client,request2)
+       /*if(i%3==0){
+         CallTwoPhaseCommit(client,request2)
+       }else if(i%3==1){
+         CallTwoPhaseCommit(client,request3)
+       }else{
+         CallTwoPhaseCommit(client,request4)
+       }*/
+     }()
+     time.Sleep(1*time.Microsecond)
    }
-   //wg.Wait()
-}
+   wg.Wait()
+   endTime := time.Now()
+   diff := endTime.Sub(startTime)
+   rate := float64(10000)/diff.Seconds() 
+	 fmt.Println("rate:", rate)
+ }

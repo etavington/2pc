@@ -87,7 +87,7 @@ func CreateAccounts(num int32,client *kivik.Client,DBname string,cache *Cache,id
     db := client.DB(context.TODO(), DBname)
     var i int32
     for i= 0; i < num; i++{
-	    Account := CouchDBAccount{AccountId: id,Deposit: 100000000,}
+	    Account := CouchDBAccount{AccountId: id,Deposit: 100000,}
 	    id, rev, err := db.CreateDoc(context.TODO(), Account)
 	    if err != nil {
           return "There are some errors", err

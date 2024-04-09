@@ -6,7 +6,7 @@ import(
  "sync"
  "os"
  "os/signal"
- "syscall"
+ //"syscall"
  "context"
  "strconv"
 
@@ -20,10 +20,6 @@ import(
  _"github.com/go-kivik/couchdb/v3"
 
 )
-
-type CouchDBAccount struct{
-  account GOCouchDBAPIs.CouchDBAccount
-}
 
 type Server struct{
   pb.UnimplementedTwoPhaseCommitServiceServer
@@ -109,6 +105,7 @@ func(server *Server)Reset(ctx context.Context,request *empty.Empty)(*pb.Response
     Msg: "Success",
   },nil
 }
+//var mu sync.Mutex
 //------------------------------------------------------------------------------------------------
 func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransactionRequest)(*pb.Response,error){
   /*var account GOCouchDBAPIs.CouchDBAccount
@@ -125,17 +122,19 @@ func(server *Server)BeginTransaction(ctx context.Context,request *pb.BeginTransa
        break
     }
   }*/
-  //server.Mu=server.cache.Map1[request.GetAccountId()].Mu
   value, _:=server.accounts_lock.Load(request.GetAccountId())
   value.(*sync.Mutex).Lock()
+  //mu.Lock()
   account, _:=server.cache.Local_accounts.Load(request.GetAccountId())
   if(account.(GOCouchDBAPIs.CouchDBAccount).Deposit+request.GetAmount()>=0){  
     msg :="Legal"
+    print("begintransactioncommit\n")
     return &pb.Response{
       Msg: msg,
     },nil
   }else{
     msg:="Illegal"
+    print("begintransactionabort\n")
     return &pb.Response{
       Msg: msg,
     },nil
@@ -149,9 +148,10 @@ func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Re
      panic(err_update)
   }
   msg_update = "Commit"
-  //Mu=server.cache.Map1[request.GetAccountId()].Mu
   value, _:=server.accounts_lock.Load(request.GetAccountId())
   value.(*sync.Mutex).Unlock()
+  //mu.Unlock()
+  print("Commit\n")
   return &pb.Response{
     Msg: msg_update,
   },nil
@@ -160,6 +160,8 @@ func(server *Server)Commit(ctx context.Context,request *pb.CommitRequest)(*pb.Re
 func(server *Server)Abort(ctx context.Context,request *pb.AbortRequest)(*pb.Response,error){
   value, _:=server.accounts_lock.Load(request.GetAccountId())
   value.(*sync.Mutex).Unlock()
+  //mu.Unlock()
+  print("Abort\n")
   return &pb.Response{
     Msg: "Abort",
   },nil
@@ -173,20 +175,36 @@ func NewServer()(Server,error){
   defer client.Close(context.Background())
   
   cache:=GOCouchDBAPIs.LoadCache()
-  
+  /*for k,v:=range cache.To_file{
+     println(k," ",v.Deposit)
+  }*/
+  //println("--------")
+  /*cache.Local_accounts.Range(func(key,value interface{})bool{
+     k,_:=key.(int32)
+     v,_:=value.(GOCouchDBAPIs.CouchDBAccount)
+     println(k," ",v.Deposit)
+     return true
+  })*/
+  //println("--------")
   server:= Server{
     client: client,
     cache: cache,
     accounts_lock: sync.Map{},
   }
   GOCouchDBAPIs.CreateLocks(cache,&server.accounts_lock)
+  /*server.accounts_lock.Range(func(key,value interface{})bool{
+      k,_:=key.(int32)
+      v,_:=value.(*sync.Mutex)
+      println(k," ",v)
+      return true
+  })*/
   return server,nil
 }
 
 func main(){
   server, err:=NewServer()
   c:=make(chan os.Signal,1)
-  signal.Notify(c,os.Interrupt,syscall.SIGINT,syscall.SIGTERM)
+  signal.Notify(c,os.Interrupt)
   go func(){
     <- c
     server.cache.To_file=GOCouchDBAPIs.SyncMapToMap(server.cache.Local_accounts)
@@ -201,7 +219,9 @@ func main(){
   if err !=nil{
     log.Fatalf("Fail to listen: %v",err)
   }
-  grpcserver :=grpc.NewServer()
+  grpcserver :=grpc.NewServer(
+    grpc.MaxConcurrentStreams(50000), 
+  )
   pb.RegisterTwoPhaseCommitServiceServer(grpcserver,&server)
 
   if err :=grpcserver.Serve(lis);err !=nil{
